@@ -41,6 +41,7 @@ import patches.instrument
 import patches.endscreen
 import patches.save
 import patches.multiworld
+import patches.mbc1
 import hints
 
 
@@ -230,4 +231,5 @@ def generateRom(options, seed, logic, multiworld=None):
     patches.aesthetics.updateSpriteData(rom)
     if options.doubletrouble:
         patches.enemies.doubleTrouble(rom)
+    patches.mbc1.useMBC1(rom)
     return rom
