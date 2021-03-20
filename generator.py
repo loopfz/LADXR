@@ -56,6 +56,7 @@ def generateRom(options, seed, logic, multiworld=None):
 
     expanded_inventory = options.witch or options.boomerang == 'gift'
     assembler.resetConsts()
+    assembler.const("INIT_BANK", 0x0C)
     if expanded_inventory:
         assembler.const("INV_SIZE", 16)
         assembler.const("wHasFlippers", 0xDB3E)
@@ -84,6 +85,7 @@ def generateRom(options, seed, logic, multiworld=None):
 
     assembler.const("wZolSpawnCount", 0xDE10)
     assembler.const("wCuccoSpawnCount", 0xDE11)
+    assembler.const("wSwitchRomCode", 0xDE12)
 
     assembler.const("HARD_MODE", 1 if options.hardMode else 0)
 
@@ -227,7 +229,7 @@ def generateRom(options, seed, logic, multiworld=None):
 
     patches.core.warpHome(rom)  # Needs to be done after setting the start location.
     patches.titleScreen.setRomInfo(rom, binascii.hexlify(seed).decode("ascii").upper(), options)
-    patches.endscreen.updateEndScreen(rom)
+    #patches.endscreen.updateEndScreen(rom)
     patches.aesthetics.updateSpriteData(rom)
     if options.doubletrouble:
         patches.enemies.doubleTrouble(rom)
