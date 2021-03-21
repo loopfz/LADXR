@@ -1,10 +1,80 @@
 import binascii
 import utils
+import re
 
-REGS = {"A": 7, "B": 0, "C": 1, "D": 2, "E": 3, "H": 4, "L": 5, "(HL)": 6, "[HL]": 6}
+
+REGS = {"A": 7, "B": 0, "C": 1, "D": 2, "E": 3, "H": 4, "L": 5, "[HL]": 6}
 FLAGS = {"NZ": 0x00, "Z": 0x08, "NC": 0x10, "C": 0x18}
 
 CONST_MAP = {}
+
+
+class Token:
+    def __init__(self, kind, value, line_nr):
+        self.kind = kind
+        self.value = value
+        self.line_nr = line_nr
+
+    def __repr__(self):
+        return "[%s:%s:%d]" % (self.kind, self.value, self.line_nr)
+
+class Tokenizer:
+    TOKEN_REGEX = re.compile('|'.join('(?P<%s>%s)' % pair for pair in [
+        ('NUMBER', r'\d+(\.\d*)?'),
+        ('HEX', r'\$[0-9A-Fa-f]+'),
+        ('ASSIGN', r':='),
+        ('COMMENT', r';[^\n]+'),
+        ('LABEL', r':'),
+        ('DIRECTIVE', r'#'),
+        ('ID', r'\.?[A-Za-z_][A-Za-z0-9_]*'),
+        ('STRING', '[a-zA-Z]?"[^"]*"'),
+        ('OP', r'[+\-*/,]'),
+        ('REFOPEN', r'\['),
+        ('REFCLOSE', r'\]'),
+        ('NEWLINE', r'\n'),
+        ('SKIP', r'[ \t]+'),
+        ('MISMATCH', r'.'),
+    ]))
+
+    def __init__(self, code):
+
+        self.__tokens = []
+        line_num = 1
+        for mo in self.TOKEN_REGEX.finditer(code):
+            kind = mo.lastgroup
+            value = mo.group()
+            if kind == 'MISMATCH':
+                print(code.split("\n")[line_num-1])
+                raise RuntimeError("Syntax error on line: %d: %s\n%s", line_num, value)
+            elif kind == 'SKIP':
+                pass
+            elif kind == 'COMMENT':
+                pass
+            else:
+                if kind == 'NUMBER':
+                    value = int(value)
+                elif kind == 'HEX':
+                    value = int(value[1:], 16)
+                elif kind == 'NEWLINE':
+                    line_num += 1
+                elif kind == 'ID':
+                    value = value.upper()
+                self.__tokens.append(Token(kind, value, line_num))
+
+    def peek(self):
+        return self.__tokens[0]
+
+    def pop(self):
+        return self.__tokens.pop(0)
+
+    def expect(self, kind, value=None):
+        pop = self.pop()
+        assert pop.kind == kind, kind
+        if value is not None:
+            assert pop.value == value, value
+
+    def __bool__(self):
+        return bool(self.__tokens)
 
 
 class Assembler:
@@ -17,6 +87,8 @@ class Assembler:
         self.__label = {}
         self.__link = {}
         self.__scope = None
+
+        self.__tok = None
 
     def toByte(self, code):
         if code.startswith("$") and len(code) == 3:
@@ -38,6 +110,43 @@ class Assembler:
             self.__link[len(self.__result)] = (Assembler.LINK_ABS16, code)
             return b'\x00\x00'
         raise ValueError("Cannot ASM '%s' into 16bit" % (code))
+
+    def process(self, code):
+        self.__tok = Tokenizer(code)
+        while self.__tok:
+            start = self.__tok.pop()
+            if start.kind == 'NEWLINE':
+                pass  # Empty newline
+            elif start.kind == 'ID':
+                if start.value == 'LD':
+                    self.instrLD()
+                    self.__tok.expect('NEWLINE')
+                elif self.__tok.peek().kind == 'LABEL':
+                    self.__tok.pop()
+                    self.addLabel(start.value)
+                else:
+                    raise SyntaxError
+            else:
+                raise SyntaxError
+
+    def instrLD(self):
+        left_param = self.__tok.pop()
+        if left_param.kind == 'ID' and left_param.value in REGS:
+            self.__tok.expect('OP', ',')
+            right_param = self.__tok.pop()
+            if right_param.kind == 'REFOPEN':
+                right_param = self.__tok.pop()
+                print(left_param, '[', right_param)
+                self.__tok.expect('REFCLOSE')
+            else:
+                print(left_param, right_param)
+        elif left_param.kind == 'ID' and left_param.value in ('HL', 'DE', 'BC'):
+            self.__tok.expect('OP', ',')
+        else:
+            raise SyntaxError
+
+    def addLabel(self, label):
+        pass
 
     def assemble(self, line):
         if ";" in line:
@@ -470,6 +579,7 @@ def resetConsts():
 
 def ASM(code, base_address=None, labels_result=None):
     asm = Assembler(base_address)
+    asm.process(code)
     conditional_stack = [True]
     for line in code.split("\n"):
         if line.startswith("#"):
