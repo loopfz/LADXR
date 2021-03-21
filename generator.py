@@ -234,4 +234,5 @@ def generateRom(options, seed, logic, multiworld=None):
     if options.doubletrouble:
         patches.enemies.doubleTrouble(rom)
     patches.mbc1.useMBC1(rom)
+    patches.save.singleSaveSlot(rom)
     return rom
